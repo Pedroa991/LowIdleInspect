@@ -18,7 +18,7 @@ class ButtomFuntions:
     def __init__(self) -> None:
         self.path_db = ""
 
-    def getbd(self):
+    def getbd(self) -> None:
         """Pega o caminho do banco de dados"""
         dirname = filedialog.askdirectory(title="Selecione a pasta do BD do Cliente")
         if dirname:

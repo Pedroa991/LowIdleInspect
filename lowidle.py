@@ -3,7 +3,7 @@
 import os
 import polars as pl
 
-SCRIPT_VERSION = "V1.0"
+SCRIPT_VERSION = "V1.1"
 COL_TIME = "Timestamp"
 LOW_RPM = 1300
 
@@ -71,7 +71,7 @@ def main(path_db: str) -> None:
     dfengdata = data_extration(engdata_path)
     listassets = extract_asset(dfengdata)
 
-    dfengdata_calculeted = pl.DataFrame()
+    dfengdata_calculated = pl.DataFrame()
 
     for asset in listassets:
 
@@ -82,7 +82,7 @@ def main(path_db: str) -> None:
         dfasset = add_islowrpmcol(dfasset)
         dfasset = period_sum(dfasset)
 
-        dfengdata_calculated = pl.concat([dfengdata_calculeted, dfasset])
+        dfengdata_calculated = pl.concat([dfengdata_calculated, dfasset])
 
     dfengdata_calculated.write_csv("final.csv", datetime_format="%m/%d/%Y %H:%M")
 
@@ -93,7 +93,7 @@ if __name__ == "__main__":
 
     # Test Mode
 
-    print("MODO DE TESTE!!!")
+    # print("MODO DE TESTE!!!")
 
-    path_engdata = os.getenv("PATH_BD") + r"\history_output.csv"
-    main(path_engdata)
+    # path_engdata = os.getenv("PATH_BD")
+    # main(path_engdata)
