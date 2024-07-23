@@ -3,7 +3,7 @@
 import os
 import polars as pl
 
-SCRIPT_VERSION = "V1.1"
+SCRIPT_VERSION = "V1.2"
 COL_TIME = "Timestamp"
 LOW_RPM = 1300
 
@@ -13,19 +13,47 @@ def calculate_id(df: pl.DataFrame) -> list[int]:
     ids = [0]
     current_id = 0
     for i in range(1, len(df)):
-        if df[i, "Is low rpm"] != df[i - 1, "Is low rpm"]:
+        if df[i, "RPM"] is not None:
+            if df[i, "Is low rpm"] != df[i - 1, "Is low rpm"]:
+                current_id += 1
+            ids.append(current_id)
+        else:
             current_id += 1
-        ids.append(current_id)
+            ids.append(None)
     return ids
 
 
 def data_extration(engdata_path: str) -> pl.DataFrame:
     """Abre arquivo e retorna dataframe"""
-    df = pl.read_csv(engdata_path, infer_schema_length=0)
+    df = pl.read_csv(
+        engdata_path, infer_schema_length=0, columns=["Timestamp", "RPM", "Asset"]
+    )
     df = df.with_columns(
-        pl.col(COL_TIME).str.strptime(pl.Datetime, format="%m/%d/%Y %H:%M")
+        pl.coalesce(
+            [
+                pl.col("Timestamp").str.strptime(
+                    pl.Datetime, "%Y-%m-%d %H:%M:%S", strict=False
+                ),
+                pl.col("Timestamp").str.strptime(
+                    pl.Datetime, "%m/%d/%Y %H:%M", strict=False
+                ),
+                pl.col("Timestamp").str.strptime(
+                    pl.Datetime, "%m/%d/%y %H:%M:%S", strict=False
+                ),
+                pl.col("Timestamp").str.strptime(
+                    pl.Datetime, "%m/%d/%y %I:%M %p", strict=False
+                ),
+                pl.col("Timestamp").str.strptime(
+                    pl.Datetime, "%m/%d/%Y %H:%M:%S", strict=False
+                ),
+                pl.col("Timestamp").str.strptime(
+                    pl.Datetime, "%m/%d/%Y %I:%M:%S %p", strict=False
+                ),
+            ]
+        ).alias("Timestamp")
     )
     df = df.cast({"RPM": pl.Float64})
+    # df = df.drop_nulls(subset=["RPM"])
     return df
 
 
@@ -65,6 +93,18 @@ def period_sum(df: pl.DataFrame) -> pl.DataFrame:
     return df
 
 
+def clean_data(df: pl.DataFrame) -> pl.DataFrame:
+    """Limpa dados com saltos de tempo maiores que 60 min"""
+    counts = df.group_by("id").agg(pl.count("RPM").alias("count"))
+    df = df.join(counts, on="id")
+    df = df.filter(
+        pl.when((df["count"] <= 1) & (df["Total time (min)"] > 60))
+        .then(False)
+        .otherwise(True)
+    )
+    return df
+
+
 def main(path_db: str) -> None:
     """Função principal do Low Idle Inspect"""
     engdata_path = path_db + r"\history_output.csv"
@@ -81,10 +121,13 @@ def main(path_db: str) -> None:
         dfasset = add_time_diff(dfasset, COL_TIME)
         dfasset = add_islowrpmcol(dfasset)
         dfasset = period_sum(dfasset)
+        dfasset = clean_data(dfasset)
 
         dfengdata_calculated = pl.concat([dfengdata_calculated, dfasset])
 
-    dfengdata_calculated.write_csv("final.csv", datetime_format="%m/%d/%Y %H:%M")
+    dfengdata_calculated.write_csv(
+        path_db + r"\lowrpm_output.csv", datetime_format="%Y-%m-%d %H:%M:%S"
+    )
 
 
 if __name__ == "__main__":
@@ -93,7 +136,7 @@ if __name__ == "__main__":
 
     # Test Mode
 
-    # print("MODO DE TESTE!!!")
+    print("MODO DE TESTE!!!")
 
-    # path_engdata = os.getenv("PATH_BD")
-    # main(path_engdata)
+    path_engdata = os.getenv("PATH_BD")
+    main(path_engdata)
